@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dark-terminal-chat"
+version = "2.0.0"
+description = "Minimal two-person encrypted terminal chat and WebSocket relay"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "cryptography>=44,<50",
+  "websockets>=15,<18",
+  "prompt-toolkit>=3.0.48,<4",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Topic :: Communications :: Chat",
+]
+
+[project.scripts]
+dark-chat = "dark_terminal_chat.client:main"
+dark-chat-server = "dark_terminal_chat.server:main"
+
+[project.urls]
+Repository = "https://github.com/iZubayr/dark-terminal-chat"
+Issues = "https://github.com/iZubayr/dark-terminal-chat/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

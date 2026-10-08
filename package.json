@@ -1,0 +1,13 @@
+{
+  "name": "dark-terminal-chat",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal two-person encrypted terminal chat",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "python -m dark_terminal_chat",
+    "server": "python -m dark_terminal_chat.server",
+    "test": "node --test"
+  }
+}

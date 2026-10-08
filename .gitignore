@@ -1,0 +1,14 @@
+node_modules/
+.env*
+*.pem
+*.key
+*.log
+.venv/
+.wheel-check/
+build/
+dist/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.local/
+.deploy/
