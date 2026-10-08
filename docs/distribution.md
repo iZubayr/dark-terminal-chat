@@ -2,7 +2,7 @@
 
 The package name and client command are both dark-chat. Python 3.10+ is required. Version 2.1.0 connects to wss://zubayr.alwaysdata.net/dark-chat/ws by default.
 
-The PyPI release is awaiting account setup. Once published, the public commands are:
+The public client commands are:
 
 ~~~sh
 pip install dark-chat

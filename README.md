@@ -6,7 +6,7 @@ Version 2 uses a new session protocol. Use version 2 clients and servers togethe
 
 ## Install
 
-The dark-chat 2.1.0 PyPI release is being prepared. After it is published:
+Install from [PyPI](https://pypi.org/project/dark-chat/):
 
 ~~~sh
 pip install dark-chat
