@@ -4,6 +4,12 @@ Deploy this chat as a separate site, directory, and virtual environment beside M
 
 AlwaysData supports [WebSocket sites](https://help.alwaysdata.com/en/blog/2023-03-14-hold-on-to-your-socks-high-speed-data-stream-hosting-with-websockets/). External clients use HTTPS/WSS, while the relay listens on the site's internal IP/port.
 
+## Deployed instance
+
+The zubayr account serves the chat at wss://zubayr.alwaysdata.net/dark-chat/ws. Health: https://zubayr.alwaysdata.net/dark-chat/health. Its clone lives at /home/zubayr/dark-chat. The separate Dark Terminal site is 1084884; scheduled task 34302 checks for updates every five minutes. MediaHub remains the root site.
+
+On 2026-10-08, the hosting environment passed all 22 tests. Two clients installed from the GitHub release exchanged messages through the public WSS endpoint. The same check verified encrypted Unicode messages, refusal of a third participant, session resumption, and rejection of an old invite after both participants left. MediaHub's /health returned HTTP 200 before and after the check.
+
 ## Install
 
 In the AlwaysData SSH terminal (replace ACCOUNT with the account name):

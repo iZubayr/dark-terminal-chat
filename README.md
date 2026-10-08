@@ -6,7 +6,13 @@ Version 2 uses a new session protocol. Upgrade both the client and server togeth
 
 ## Install
 
-From GitHub (requires Git):
+From the GitHub release (no Git required):
+
+~~~sh
+python -m pip install https://github.com/iZubayr/dark-terminal-chat/releases/download/v2.0.0/dark_terminal_chat-2.0.0-py3-none-any.whl
+~~~
+
+From GitHub source (requires Git):
 
 ~~~sh
 python -m pip install "git+https://github.com/iZubayr/dark-terminal-chat.git@v2.0.0"
@@ -78,14 +84,14 @@ On Windows, chat.cmd and server.cmd use this folder's .venv when available.
 
 ## Internet use
 
-Once the server is deployed:
+The deployed server is available at wss://zubayr.alwaysdata.net/dark-chat/ws:
 
 ~~~sh
-dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws --new --name elliot
-dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws --name whiterose
+dark-chat --server wss://zubayr.alwaysdata.net/dark-chat/ws --new --name elliot
+dark-chat --server wss://zubayr.alwaysdata.net/dark-chat/ws --name whiterose
 ~~~
 
-Replace ACCOUNT with your actual account. Share the server address and code with the peer. Use wss:// for internet connections. TLS certificates are checked; --ca ca.pem supports a private certificate authority.
+Share the server address and code with the peer. The peer chooses j and enters the code. Use wss:// for internet connections. TLS certificates are checked; --ca ca.pem supports a private certificate authority.
 
 You may set DARK_CHAT_SERVER to avoid repeating --server. DARK_CHAT_CODE is supported for non-interactive clients; interactive clients ask for the code instead.
 
@@ -121,6 +127,6 @@ python -m twine check dist/*
 
 [Package distribution](docs/distribution.md). A local wheel is installable now; a short pip package-name command requires a real PyPI release.
 
-GitHub Actions tests the installed wheel on Linux with Python 3.10/3.12 and on Windows with Python 3.12. The Linux hosting updater checks those tests before changing the running version. See [automatic updates](docs/alwaysdata.md#automatic-updates).
+GitHub Actions tests the installed wheel on Linux with Python 3.10/3.12 and on Windows with Python 3.12. After all jobs pass, it advances the deploy branch. AlwaysData checks that branch every five minutes and tests the candidate again before changing the running version. See [automatic updates](docs/alwaysdata.md#automatic-updates).
 
 The earlier Node.js TCP experiment remains as reference source only. It does not support the current session protocol. The Python client/server is the application.
