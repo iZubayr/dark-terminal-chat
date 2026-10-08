@@ -74,11 +74,17 @@ Add a separate AlwaysData scheduled task:
 | --- | --- |
 | Type | Command |
 | Frequency | Every 5 minutes |
-| Command | python3 /home/ACCOUNT/dark-chat/scripts/update.py |
+| Command | See the bootstrap command below |
 | Working directory | /home/ACCOUNT/dark-chat |
 | Annotation | Dark Terminal updates |
 
-The task fetches origin/main and checks that this exact commit passed the GitHub Tests workflow. It builds a separate release environment and runs the tests there before fast-forwarding the clone and atomically changing .deploy/current. The supervisor then restarts only the chat child process. No GitHub SSH private key or AlwaysData API token is needed.
+Scheduled task command (replace ACCOUNT):
+
+~~~sh
+/bin/bash -c 'set -eu; cd /home/ACCOUNT/dark-chat; git fetch origin main; mkdir -p .deploy; git show origin/main:scripts/update.py > .deploy/update-current.py; exec python3 .deploy/update-current.py'
+~~~
+
+The bootstrap uses the current upstream updater, so fixes to deployment itself can take effect. The updater checks that this exact commit passed the GitHub Tests workflow. It builds a separate release environment and runs the tests there before fast-forwarding the clone and atomically changing .deploy/current. Pip runs in isolated mode with --no-user because AlwaysData otherwise defaults to user installs. The supervisor then restarts only the chat child process. No GitHub SSH private key or AlwaysData API token is needed.
 
 Failed tests, failed installs, local edits, or diverged commits leave the active release unchanged. A lock prevents overlapping updates. Previous release environments remain available in .deploy/releases for recovery. A successful upgrade ends any current chats because rooms exist only in memory.
 

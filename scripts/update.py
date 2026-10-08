@@ -64,12 +64,16 @@ def stage(revision, root=ROOT):
             if member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
                 raise ValueError("Unexpected file in release archive")
             (source / member.name).resolve().relative_to(source.resolve())
-        # The paths and member types above have been checked on Python 3.10+.
-        tree.extractall(source)
+        if hasattr(tarfile, "data_filter"):
+            tree.extractall(source, filter="data")
+        else:
+            # Older Python 3.10 versions use the path/type checks above.
+            tree.extractall(source)
     environment = release / "venv"
     venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / "bin/python"
-    command(str(python), "-m", "pip", "install", "--timeout", "120", str(source), cwd=source)
+    # AlwaysData defaults pip to --user; this release has its own environment.
+    command(str(python), "-m", "pip", "--isolated", "install", "--no-user", "--timeout", "120", str(source), cwd=source)
     command(str(python), "-m", "pip", "check", cwd=source)
     command(str(python), "-m", "unittest", "discover", "-s", "tests", "-v", cwd=source)
     return release
