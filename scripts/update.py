@@ -2,14 +2,11 @@
 import argparse
 import contextlib
 import io
-import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import tarfile
-import urllib.error
-import urllib.request
 import venv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,17 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def command(*args, cwd=ROOT, capture=False):
     return subprocess.run(args, cwd=cwd, check=True, text=True,
                           stdout=subprocess.PIPE if capture else None).stdout
-
-
-def ci_passed(repository, revision):
-    url = (f"https://api.github.com/repos/{repository}/actions/workflows/ci.yml/runs"
-           f"?branch=main&event=push&head_sha={revision}&per_page=10")
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
-                                                  "User-Agent": "dark-terminal-chat-updater"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        runs = json.load(response)["workflow_runs"]
-    matches = [run for run in runs if run["head_sha"] == revision]
-    return bool(matches and max(matches, key=lambda run: (run["run_number"], run.get("run_attempt", 1)))["conclusion"] == "success")
 
 
 def current_release(root=ROOT):
@@ -97,18 +83,18 @@ def update(root=ROOT):
         match = re.fullmatch(r"https://github\.com/([\w.-]+/[\w.-]+?)(?:\.git)?", origin)
         if not match:
             raise ValueError("Origin must be a public GitHub HTTPS repository")
-        command("git", "fetch", "origin", "main", cwd=root)
-        revision = command("git", "rev-parse", "origin/main", cwd=root, capture=True).strip()
+        # CI alone advances deploy after every test job succeeds. No API token
+        # or shared hosting API rate limit is involved in this checkout.
+        command("git", "fetch", "origin", "main", "deploy", cwd=root)
+        revision = command("git", "rev-parse", "origin/deploy", cwd=root, capture=True).strip()
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise ValueError("Invalid upstream revision")
+        command("git", "merge-base", "--is-ancestor", revision, "origin/main", cwd=root)
         previous = current_release(root)
         if previous and previous.name == revision:
             print(f"Already current: {revision}")
             return
         command("git", "merge-base", "--is-ancestor", "HEAD", revision, cwd=root)
-        if not ci_passed(match.group(1), revision):
-            print(f"Waiting for successful GitHub tests: {revision}")
-            return
         release = stage(revision, root)
         command("git", "merge", "--ff-only", revision, cwd=root)
         activate(release, root)
@@ -120,7 +106,7 @@ def main():
     parser.parse_args()
     try:
         update()
-    except (OSError, ValueError, subprocess.CalledProcessError, urllib.error.URLError) as error:
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"Update failed: {error}") from None
 
 

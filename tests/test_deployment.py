@@ -1,6 +1,5 @@
 import contextlib
 import io
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -9,17 +8,6 @@ import unittest
 from unittest.mock import patch
 
 from scripts import update as updater
-
-
-class CIApprovalTests(unittest.TestCase):
-    def test_latest_failed_retry_does_not_approve_a_previous_success(self):
-        revision = "a" * 40
-        runs = {"workflow_runs": [
-            {"head_sha": revision, "run_number": 12, "run_attempt": 1, "conclusion": "success"},
-            {"head_sha": revision, "run_number": 12, "run_attempt": 2, "conclusion": "failure"},
-        ]}
-        with patch.object(updater.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps(runs).encode())):
-            self.assertFalse(updater.ci_passed("owner/repo", revision))
 
 
 @unittest.skipUnless(os.name == "posix", "AlwaysData deployment runs on Linux")
@@ -39,6 +27,7 @@ class DeploymentTests(unittest.TestCase):
         self.git(self.upstream, "add", ".")
         self.git(self.upstream, "commit", "-m", "original")
         self.old = self.git(self.upstream, "rev-parse", "HEAD")
+        self.git(self.upstream, "branch", "deploy", self.old)
         self.git(self.folder, "clone", str(self.upstream), str(self.root))
         old_release = self.root / ".deploy/releases" / self.old
         old_release.mkdir(parents=True)
@@ -71,14 +60,15 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.old)
         self.assertEqual(updater.current_release(self.root).name, self.old)
 
-    def test_failed_ci_preserves_active_release_and_checkout(self):
-        with patch.object(updater, "ci_passed", return_value=False), patch.object(updater, "stage") as stage:
+    def test_unapproved_main_preserves_active_release_and_checkout(self):
+        with patch.object(updater, "stage") as stage:
             self.run_update()
             stage.assert_not_called()
         self.assert_original_active()
 
     def test_failed_install_preserves_active_release_and_checkout(self):
-        with patch.object(updater, "ci_passed", return_value=True), patch.object(updater, "stage", side_effect=OSError("failed install")):
+        self.git(self.upstream, "branch", "-f", "deploy", self.new)
+        with patch.object(updater, "stage", side_effect=OSError("failed install")):
             with self.assertRaises(OSError):
                 self.run_update()
         self.assert_original_active()
@@ -91,9 +81,10 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual((self.root / "source.txt").read_text(), "local edit")
 
     def test_success_fast_forwards_and_switches_active_release(self):
+        self.git(self.upstream, "branch", "-f", "deploy", self.new)
         new_release = self.root / ".deploy/releases" / self.new
         new_release.mkdir()
-        with patch.object(updater, "ci_passed", return_value=True), patch.object(updater, "stage", return_value=new_release) as stage:
+        with patch.object(updater, "stage", return_value=new_release) as stage:
             self.run_update()
             stage.assert_called_once_with(self.new, self.root)
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), self.new)
@@ -101,6 +92,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual((self.root / "source.txt").read_text(), "new version")
 
     def test_diverged_checkout_is_never_reset(self):
+        self.git(self.upstream, "branch", "-f", "deploy", self.new)
         self.git(self.root, "config", "user.name", "Test")
         self.git(self.root, "config", "user.email", "test@example.invalid")
         (self.root / "source.txt").write_text("local commit")
@@ -110,6 +102,15 @@ class DeploymentTests(unittest.TestCase):
             self.run_update()
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), diverged)
         self.assertEqual(updater.current_release(self.root).name, self.old)
+
+    def test_deployment_revision_outside_main_is_rejected(self):
+        self.git(self.upstream, "checkout", "-b", "other", self.old)
+        (self.upstream / "source.txt").write_text("outside main")
+        self.git(self.upstream, "commit", "-am", "other")
+        self.git(self.upstream, "branch", "-f", "deploy", "HEAD")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_update()
+        self.assert_original_active()
 
 
 if __name__ == "__main__":

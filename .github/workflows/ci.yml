@@ -45,3 +45,26 @@ jobs:
         with:
           name: python-package
           path: dist/*
+
+  approve-deployment:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: approve-deployment
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Advance the tested deployment branch
+        shell: bash
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "A newer main commit exists; leave deployment approval to its tests."
+            exit 0
+          fi
+          git push origin "$GITHUB_SHA:refs/heads/deploy"

@@ -10,13 +10,13 @@ In the AlwaysData SSH terminal (replace ACCOUNT with the account name):
 
 ~~~sh
 cd /home/ACCOUNT
-git clone https://github.com/iZubayr/dark-terminal-chat.git dark-chat
+git clone --branch deploy https://github.com/iZubayr/dark-terminal-chat.git dark-chat
 cd dark-chat
 python3 scripts/update.py
 .deploy/current/venv/bin/dark-chat-server --version
 ~~~
 
-Python 3.10+ is required. The updater waits until the main commit passes GitHub Actions, then installs and tests it in its own environment. If it says it is waiting for GitHub tests, run it again after the Tests workflow finishes.
+Python 3.10+ is required. GitHub Actions advances the deploy branch only after every test job passes. The updater installs that approved commit and tests it again in its own environment. The deploy branch becomes available after the first successful Tests workflow.
 
 ## Add a site
 
@@ -81,10 +81,10 @@ Add a separate AlwaysData scheduled task:
 Scheduled task command (replace ACCOUNT):
 
 ~~~sh
-/bin/bash -c 'set -eu; cd /home/ACCOUNT/dark-chat; git fetch origin main; mkdir -p .deploy; git show origin/main:scripts/update.py > .deploy/update-current.py; exec python3 .deploy/update-current.py'
+/bin/bash -c 'set -eu; cd /home/ACCOUNT/dark-chat; git fetch origin main deploy; mkdir -p .deploy; git show origin/deploy:scripts/update.py > .deploy/update-current.py; exec python3 .deploy/update-current.py'
 ~~~
 
-The bootstrap uses the current upstream updater, so fixes to deployment itself can take effect. The updater checks that this exact commit passed the GitHub Tests workflow. It builds a separate release environment and runs the tests there before fast-forwarding the clone and atomically changing .deploy/current. Pip runs in isolated mode with --no-user because AlwaysData otherwise defaults to user installs. The supervisor then restarts only the chat child process. No GitHub SSH private key or AlwaysData API token is needed.
+The bootstrap uses the approved upstream updater, so fixes to deployment itself can take effect. The updater fetches the deploy branch published by GitHub Tests, verifies that its commit belongs to main, and builds a separate release environment. It runs the tests there before fast-forwarding the clone and atomically changing .deploy/current. Pip runs in isolated mode with --no-user because AlwaysData otherwise defaults to user installs. The supervisor then restarts only the chat child process. No GitHub SSH private key, API token, or unauthenticated GitHub API call is needed on the server.
 
 Failed tests, failed installs, local edits, or diverged commits leave the active release unchanged. A lock prevents overlapping updates. Previous release environments remain available in .deploy/releases for recovery. A successful upgrade ends any current chats because rooms exist only in memory.
 
