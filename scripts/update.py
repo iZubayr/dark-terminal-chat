@@ -5,6 +5,7 @@ import io
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tarfile
 import venv
@@ -22,8 +23,9 @@ def current_release(root=ROOT):
     if not current.exists():
         return None
     target = current.resolve(strict=True)
-    target.relative_to((root / ".deploy/releases").resolve())
-    if not re.fullmatch(r"[0-9a-f]{40}", target.name):
+    releases = (root / ".deploy/releases").resolve()
+    releases.relative_to(root.resolve())
+    if target.parent != releases or not re.fullmatch(r"[0-9a-f]{40}", target.name):
         raise ValueError("Invalid active release")
     return target
 
@@ -37,9 +39,32 @@ def activate(release, root=ROOT):
     os.replace(pending, current)
 
 
+def prune_releases(root=ROOT):
+    releases = root / ".deploy/releases"
+    if releases.is_symlink():
+        raise ValueError("Release directory must not be a symlink")
+    boundary = releases.resolve()
+    boundary.relative_to(root.resolve())
+    if not releases.exists():
+        return
+    active = current_release(root)
+    for candidate in releases.iterdir():
+        if (candidate.is_symlink() or not candidate.is_dir()
+                or not re.fullmatch(r"[0-9a-f]{40}", candidate.name)):
+            continue
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(boundary)
+        if resolved == active:
+            continue
+        # These directories contain generated installs, rebuildable from Git.
+        shutil.rmtree(resolved)
+        print(f"Removed inactive release: {candidate.name}")
+
+
 def stage(revision, root=ROOT):
+    # The free hosting quota cannot retain an unbounded number of environments.
+    prune_releases(root)
     release = root / ".deploy/releases" / revision
-    # A failed previous install may be retried in the same isolated directory.
     release.mkdir(parents=True, exist_ok=True)
     source = release / "code"
     source.mkdir(exist_ok=True)
@@ -59,7 +84,7 @@ def stage(revision, root=ROOT):
     venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / "bin/python"
     # AlwaysData defaults pip to --user; this release has its own environment.
-    command(str(python), "-m", "pip", "--isolated", "install", "--no-user", "--timeout", "120", str(source), cwd=source)
+    command(str(python), "-m", "pip", "--isolated", "install", "--no-user", "--no-cache-dir", "--timeout", "120", str(source), cwd=source)
     command(str(python), "-m", "pip", "check", cwd=source)
     command(str(python), "-m", "unittest", "discover", "-s", "tests", "-v", cwd=source)
     return release

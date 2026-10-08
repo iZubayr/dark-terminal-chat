@@ -112,6 +112,37 @@ class DeploymentTests(unittest.TestCase):
             self.run_update()
         self.assert_original_active()
 
+    def test_cleanup_keeps_active_release_and_unrelated_files(self):
+        releases = self.root / ".deploy/releases"
+        failed = releases / self.new
+        failed.mkdir()
+        (failed / "partial-install.txt").write_text("generated")
+        note = releases / "notes.txt"
+        note.write_text("keep")
+        updater.prune_releases(self.root)
+        self.assertFalse(failed.exists())
+        self.assertEqual(note.read_text(), "keep")
+        self.assert_original_active()
+
+    def test_cleanup_never_follows_a_release_symlink(self):
+        outside = self.folder / "outside"
+        outside.mkdir()
+        (outside / "important.txt").write_text("keep")
+        link = self.root / ".deploy/releases" / self.new
+        link.symlink_to(outside, target_is_directory=True)
+        updater.prune_releases(self.root)
+        self.assertTrue(link.is_symlink())
+        self.assertEqual((outside / "important.txt").read_text(), "keep")
+        self.assert_original_active()
+
+    def test_cleanup_refuses_a_release_directory_outside_the_clone(self):
+        other = self.folder / "other-clone"
+        (other / ".deploy").mkdir(parents=True)
+        (other / ".deploy/releases").symlink_to(self.root / ".deploy/releases", target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            updater.prune_releases(other)
+        self.assert_original_active()
+
 
 if __name__ == "__main__":
     unittest.main()
