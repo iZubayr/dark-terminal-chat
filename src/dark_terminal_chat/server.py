@@ -65,7 +65,7 @@ class Relay:
 
     async def reject(self, ws, code, message):
         await self.send(ws, {"type": "error", "code": code, "message": message})
-        await ws.close(code=1008, reason=message)
+        await ws.close(code=1013 if code == "busy" else 1008, reason=message)
 
     async def presence(self, room_id):
         room = self.rooms.get(room_id)

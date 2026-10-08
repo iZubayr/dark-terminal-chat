@@ -261,6 +261,19 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         await a.send(dumps(self.envelope(keys, {"text": "new message"}, message_id=2)))
         self.assertEqual(decrypt(keys, await self.next(resumed, "message"))["text"], "new message")
 
+    async def test_busy_connection_is_temporary_and_preserves_existing_room(self):
+        keys = room_keys(new_code())
+        await self.peer(keys)
+        self.relay.max_clients = 1
+        busy = await connect(self.url)
+        self.clients.append(busy)
+        self.assertEqual((await self.next(busy, "error"))["code"], "busy")
+        await busy.wait_closed()
+        self.assertEqual(busy.close_code, 1013)
+        self.relay.max_clients = 128
+        await self.peer(keys, action="join")
+        self.assertEqual(len(self.relay.rooms[keys.room].participants), 2)
+
     async def test_reconnect_attempts_end_when_the_budget_expires(self):
         class QuietTerminal:
             interactive = False
