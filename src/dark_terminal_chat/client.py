@@ -170,7 +170,7 @@ class Chat:
         try:
             await self.ws.send(dumps(envelope))
             confirmed = await asyncio.wait_for(future, timeout=8)
-        except (ConnectionClosed, OSError, TimeoutError):
+        except (ConnectionClosed, OSError, TimeoutError, asyncio.TimeoutError):
             confirmed = False
         finally:
             self.pending.pop(message_id, None)
@@ -319,7 +319,7 @@ class Chat:
                                 await ws.send(dumps({"type": "leave"}))
                             return
                         receiver.result()
-                except (ConnectionClosed, ConnectionError, OSError, TimeoutError, InvalidHandshake) as error:
+                except (ConnectionClosed, ConnectionError, OSError, TimeoutError, asyncio.TimeoutError, InvalidHandshake) as error:
                     if not self.token:
                         raise
                     if isinstance(error, ConnectionClosed) and error.rcvd and error.rcvd.code in {1008, 4001}:
@@ -344,7 +344,7 @@ class Chat:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise SessionError("Reconnect window expired. Start a new chat.")
-                    with contextlib.suppress(TimeoutError):
+                    with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
                         await asyncio.wait_for(self.finished.wait(), min(1, remaining))
         finally:
             self.finished.set()
@@ -392,7 +392,7 @@ def main():
     except SessionError as error:
         terminal.say(str(error))
         raise SystemExit(1) from None
-    except (ValueError, OSError, ConnectionClosed, ConnectionError, TimeoutError, InvalidHandshake) as error:
+    except (ValueError, OSError, ConnectionClosed, ConnectionError, TimeoutError, asyncio.TimeoutError, InvalidHandshake) as error:
         detail = str(error) if isinstance(error, ValueError) else type(error).__name__
         terminal.say(f"Error: {detail}")
         raise SystemExit(1) from None

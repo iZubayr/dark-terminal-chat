@@ -211,7 +211,7 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.next(a, "not_delivered"))["id"], 1)
         resumed, _ = await self.peer(keys, action="resume", session=sid_b, token=token)
         await self.next(resumed, "presence")
-        with self.assertRaises(TimeoutError):
+        with self.assertRaises(asyncio.TimeoutError):
             await asyncio.wait_for(resumed.recv(), 0.1)
         await a.send(dumps(self.envelope(keys, {"text": "new message"}, message_id=2)))
         self.assertEqual(decrypt(keys, await self.next(resumed, "message"))["text"], "new message")
@@ -305,7 +305,7 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         frame = await self.next(a, "message")
         self.assertEqual(frame["sender"], sid_b)
         self.assertEqual(decrypt(keys, frame)["text"], "Javob")
-        with self.assertRaises(TimeoutError):
+        with self.assertRaises(asyncio.TimeoutError):
             await asyncio.wait_for(outsider.recv(), 0.1)
         await self.leave(a)
         await self.leave(b)

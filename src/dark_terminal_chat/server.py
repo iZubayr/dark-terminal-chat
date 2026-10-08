@@ -59,7 +59,7 @@ class Relay:
         try:
             await asyncio.wait_for(ws.send(dumps(frame)), timeout=3)
             return True
-        except (ConnectionClosed, TimeoutError):
+        except (ConnectionClosed, TimeoutError, asyncio.TimeoutError):
             await ws.close(code=1013, reason="Connection lost")
             return False
 
@@ -183,7 +183,7 @@ class Relay:
         except ConnectionClosed as error:
             if error.rcvd and error.rcvd.code == 1008:
                 left = True
-        except (ValueError, TimeoutError, UnicodeError):
+        except (ValueError, TimeoutError, asyncio.TimeoutError, UnicodeError):
             left = True
             await ws.close(code=1008, reason="Invalid protocol")
         finally:
