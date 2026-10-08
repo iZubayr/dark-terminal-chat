@@ -143,6 +143,14 @@ class DeploymentTests(unittest.TestCase):
             updater.prune_releases(other)
         self.assert_original_active()
 
+    def test_cleanup_refuses_a_broken_active_link(self):
+        current = self.root / ".deploy/current"
+        current.unlink()
+        current.symlink_to(self.root / ".deploy/releases" / self.new, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "missing"):
+            updater.prune_releases(self.root)
+        self.assertTrue((self.root / ".deploy/releases" / self.old).is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()

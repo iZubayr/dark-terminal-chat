@@ -21,6 +21,8 @@ def command(*args, cwd=ROOT, capture=False):
 def current_release(root=ROOT):
     current = root / ".deploy/current"
     if not current.exists():
+        if current.is_symlink():
+            raise ValueError("Active release is missing; cleanup refused")
         return None
     target = current.resolve(strict=True)
     releases = (root / ".deploy/releases").resolve()
