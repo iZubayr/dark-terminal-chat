@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ import sys
 import tempfile
 import unittest
 import uuid
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta, timezone
 
 from cryptography import x509
@@ -25,7 +26,7 @@ from prompt_toolkit.output import DummyOutput
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
-from dark_terminal_chat.client import Chat, SessionError, server_url
+from dark_terminal_chat.client import Chat, SessionError, main, server_url
 from dark_terminal_chat.protocol import decrypt, dumps, encrypt, new_code, parse, room_keys, safe_text, valid_message
 from dark_terminal_chat.server import Relay
 
@@ -87,6 +88,50 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reply["room"], keys.room)
         self.assertEqual(reply["decoded"], message)
         self.assertEqual(decrypt(keys, reply["envelope"]), message)
+
+
+class CommandTests(unittest.TestCase):
+    def invoke(self, arguments, answers=(), environment=None):
+        terminal = MagicMock(interactive=False)
+        terminal.ask.side_effect = answers
+        env = dict(os.environ)
+        env.pop("DARK_CHAT_CODE", None)
+        env.pop("DARK_CHAT_SERVER", None)
+        env.update(environment or {})
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["dark-chat", *arguments]), \
+                patch("dark_terminal_chat.client.Terminal", return_value=terminal), \
+                patch.object(Chat, "run", new_callable=AsyncMock) as run:
+            main()
+        return terminal, run
+
+    def test_new_uses_hosted_server_and_asks_only_for_name(self):
+        terminal, run = self.invoke(["--new"], ["elliot"])
+        terminal.ask.assert_called_once_with("Name: ")
+        url, create, code, ca = run.call_args.args
+        self.assertEqual(url, "wss://zubayr.alwaysdata.net/dark-chat/ws")
+        self.assertTrue(create)
+        room_keys(code)
+        self.assertIsNone(ca)
+
+    def test_chat_asks_for_name_and_code_without_mode_menu(self):
+        terminal, run = self.invoke(["--chat"], ["whiterose", new_code()])
+        self.assertEqual([call.args[0] for call in terminal.ask.call_args_list], ["Name: ", "Code: "])
+        self.assertEqual(terminal.ask.call_args_list[1].kwargs, {"secret": True})
+        self.assertEqual(run.call_args.args[:3], ("wss://zubayr.alwaysdata.net/dark-chat/ws", False, None))
+
+    def test_private_server_override_and_environment_still_work(self):
+        for arguments, expected in [(["--new", "--name", "elliot"], "ws://127.0.0.1:9000/ws"),
+                                    (["--new", "--name", "elliot", "--server", "ws://localhost:8080/ws"],
+                                     "ws://localhost:8080/ws")]:
+            with self.subTest(arguments=arguments):
+                terminal, run = self.invoke(arguments, environment={"DARK_CHAT_SERVER": "ws://127.0.0.1:9000/ws"})
+                terminal.ask.assert_not_called()
+                self.assertEqual(run.call_args.args[0], expected)
+
+    def test_create_and_join_cannot_be_combined(self):
+        with self.assertRaises(SystemExit) as raised, contextlib.redirect_stderr(io.StringIO()):
+            self.invoke(["--new", "--chat"])
+        self.assertEqual(raised.exception.code, 2)
 
 
 class RelayTests(unittest.IsolatedAsyncioTestCase):
@@ -355,13 +400,15 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
         children = []
         outputs = {}
         async def launch(name, code=None, create=False):
-            arguments = [sys.executable, "-m", "dark_terminal_chat", "--server", self.url, "--name", name]
+            arguments = [sys.executable, "-m", "dark_terminal_chat", "--name", name]
             if create:
                 arguments.append("--new")
+            else:
+                arguments.append("--chat")
             child = await asyncio.create_subprocess_exec(
                 *arguments,
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-                env={**os.environ, "DARK_CHAT_CODE": code or "", "PYTHONIOENCODING": "utf-8"})
+                env={**os.environ, "DARK_CHAT_SERVER": self.url, "DARK_CHAT_CODE": code or "", "PYTHONIOENCODING": "utf-8"})
             children.append(child)
             outputs[child.pid] = ""
             async def collect():

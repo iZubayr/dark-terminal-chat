@@ -2,23 +2,31 @@
 
 A plain, English terminal chat for two people. No banner, logo, animation, or forced color. Python 3.10 or newer is required. The client and WebSocket server install from the same Python package.
 
-Version 2 uses a new session protocol. Upgrade both the client and server together. Source: [GitHub](https://github.com/iZubayr/dark-terminal-chat). The package has not been published to PyPI.
+Version 2 uses a new session protocol. Use version 2 clients and servers together. Source: [GitHub](https://github.com/iZubayr/dark-terminal-chat).
 
 ## Install
 
-From the GitHub release (no Git required):
+The dark-chat 2.1.0 PyPI release is being prepared. After it is published:
 
 ~~~sh
-python -m pip install https://github.com/iZubayr/dark-terminal-chat/releases/download/v2.0.0/dark_terminal_chat-2.0.0-py3-none-any.whl
+pip install dark-chat
 ~~~
 
-From GitHub source (requires Git):
+Create a chat:
 
 ~~~sh
-python -m pip install "git+https://github.com/iZubayr/dark-terminal-chat.git@v2.0.0"
+dark-chat --new
 ~~~
 
-From this folder on Windows:
+Join a chat:
+
+~~~sh
+dark-chat --chat
+~~~
+
+Enter your name when asked. The creator receives a code and shares it with the peer. The peer enters that code when asked. Both commands connect to the hosted server automatically.
+
+For development, install from this folder on Windows:
 
 ~~~powershell
 python -m venv .venv
@@ -34,12 +42,6 @@ python3 -m venv .venv
 python -m pip install .
 ~~~
 
-From the built wheel, inside your Python environment:
-
-~~~sh
-python -m pip install ./dark_terminal_chat-2.0.0-py3-none-any.whl
-~~~
-
 The package provides two commands: dark-chat and dark-chat-server. You can also use python -m dark_terminal_chat and python -m dark_terminal_chat.server.
 
 ## Local use
@@ -51,13 +53,13 @@ Open three terminals with the Python environment activated.
 dark-chat-server
 
 # Creator
-dark-chat --new --name elliot
+dark-chat --server ws://127.0.0.1:8080/ws --new --name elliot
 
 # Peer, in another terminal
-dark-chat --name whiterose
+dark-chat --server ws://127.0.0.1:8080/ws --chat --name whiterose
 ~~~
 
-The creator receives a line starting with "Code:". The peer chooses "j" at "Create or join? [c/j]:" and pastes that code. The code is hidden while entering it. If no name is supplied, the program asks "Name:".
+The creator receives a line starting with "Code:". The peer pastes that code at "Code:". The code is hidden while entering it. If no name is supplied, the program asks "Name:". Running dark-chat without either mode asks "Create or join? [c/j]:".
 
 The interface contains only prompts, messages, and relevant connection/error notices. Example:
 
@@ -87,13 +89,13 @@ On Windows, chat.cmd and server.cmd use this folder's .venv when available.
 The deployed server is available at wss://zubayr.alwaysdata.net/dark-chat/ws:
 
 ~~~sh
-dark-chat --server wss://zubayr.alwaysdata.net/dark-chat/ws --new --name elliot
-dark-chat --server wss://zubayr.alwaysdata.net/dark-chat/ws --name whiterose
+dark-chat --new
+dark-chat --chat
 ~~~
 
-Share the server address and code with the peer. The peer chooses j and enters the code. Use wss:// for internet connections. TLS certificates are checked; --ca ca.pem supports a private certificate authority.
+Share the code with the peer. To use your own relay, pass --server wss://YOUR_SERVER/ws. Use wss:// for internet connections. TLS certificates are checked; --ca ca.pem supports a private certificate authority.
 
-You may set DARK_CHAT_SERVER to avoid repeating --server. DARK_CHAT_CODE is supported for non-interactive clients; interactive clients ask for the code instead.
+DARK_CHAT_SERVER can override the default relay. --server overrides that environment variable. DARK_CHAT_CODE is supported for non-interactive clients; interactive clients ask for the code instead.
 
 For local Wi-Fi, use --host 0.0.0.0 on the server and --server ws://LAN_IP:8080/ws --allow-insecure on clients.
 
@@ -125,7 +127,7 @@ python -m build
 python -m twine check dist/*
 ~~~
 
-[Package distribution](docs/distribution.md). A local wheel is installable now; a short pip package-name command requires a real PyPI release.
+[Package distribution](docs/distribution.md).
 
 GitHub Actions tests the installed wheel on Linux with Python 3.10/3.12 and on Windows with Python 3.12. After all jobs pass, it advances the deploy branch. AlwaysData checks that branch every five minutes and tests the candidate again before changing the running version. See [automatic updates](docs/alwaysdata.md#automatic-updates).
 

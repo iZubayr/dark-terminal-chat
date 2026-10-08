@@ -1,77 +1,44 @@
-# Distributing the Python package
+# Distributing dark-chat
 
-Installing the package and hosting the chat relay are separate steps. The client connects to the WebSocket address supplied by the user.
+The package name and client command are both dark-chat. Python 3.10+ is required. Version 2.1.0 connects to wss://zubayr.alwaysdata.net/dark-chat/ws by default.
 
-## Wheel file
-
-Build the release:
+The PyPI release is awaiting account setup. Once published, the public commands are:
 
 ~~~sh
-python -m pip install build twine
-python -m build
-python -m twine check dist/dark_terminal_chat-2.0.0*
+pip install dark-chat
+dark-chat --new
+dark-chat --chat
 ~~~
 
-Release files:
+The creator shares the code with the peer. Names and codes are entered at the terminal prompts. The server address is optional; --server and DARK_CHAT_SERVER support other relays.
 
-~~~text
-dist/dark_terminal_chat-2.0.0-py3-none-any.whl
-dist/dark_terminal_chat-2.0.0.tar.gz
-~~~
-
-Share the wheel with the peer. Inside a Python environment:
+## Build and verify
 
 ~~~sh
-python -m pip install ./dark_terminal_chat-2.0.0-py3-none-any.whl
-dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws
+python -m build --outdir dist/2.1.0
+python -m twine check dist/2.1.0/*
+python -m pip install dist/2.1.0/dark_chat-2.1.0-py3-none-any.whl
+python -m pip check
+python -m unittest discover -s tests -v
+dark-chat --version
 ~~~
 
-Python and internet access are required to install dependencies. The project's wheel is platform-independent; pip selects platform-specific dependencies where needed. Windows has been tested locally; GitHub Actions also checks Linux. Physical macOS terminals need their own validation.
+Keep earlier dark-terminal-chat distribution files separate. Publish only the new dark-chat distribution. The import module remains dark_terminal_chat, so a client environment should contain one of these distributions at a time.
 
-To host the wheel yourself, add a separate Static files site, for example ACCOUNT.alwaysdata.net/downloads, containing the release file. Once that actual URL exists:
+## PyPI publishing
 
-~~~sh
-python -m pip install https://ACCOUNT.alwaysdata.net/downloads/dark_terminal_chat-2.0.0-py3-none-any.whl
-~~~
+Configure a pending GitHub Trusted Publisher under [PyPI account publishing](https://pypi.org/manage/account/publishing/):
 
-The chat relay does not serve download files.
+| Field | Value |
+| --- | --- |
+| PyPI project name | dark-chat |
+| GitHub owner | iZubayr |
+| Repository | dark-terminal-chat |
+| Workflow filename | ci.yml |
+| Environment | pypi |
 
-## GitHub
+Then run the Tests workflow on main with the publish input enabled. It builds and installs the package, runs tests on Linux with Python 3.10/3.12 and Windows with Python 3.12, and checks the installed dark-chat command. Only after all jobs pass does the publish job upload the tested Linux 3.12 artifact to PyPI using short-lived OIDC credentials. No permanent PyPI API token is stored in the repository or on AlwaysData.
 
-Source repository: [iZubayr/dark-terminal-chat](https://github.com/iZubayr/dark-terminal-chat).
+After publishing, install dark-chat from the normal PyPI index in a fresh environment. Verify --new and --chat exchange messages through the default public relay. A built wheel or successful GitHub workflow without a successful PyPI publish does not establish that pip install dark-chat works.
 
-~~~sh
-python -m pip install "git+https://github.com/iZubayr/dark-terminal-chat.git@v2.0.0"
-~~~
-
-This method requires Git as well as Python. PyPI publication is separate from the GitHub repository.
-
-## PyPI
-
-Follow the [official Python packaging guide](https://packaging.python.org/en/latest/tutorials/packaging-projects/).
-
-1. Choose an available package name. The local metadata name is dark-terminal-chat; PyPI availability has not been verified.
-2. Set up a PyPI account, required 2FA, and an API token or trusted publisher.
-3. Add a license and real project URLs to pyproject.toml. Update the version/name as needed and rebuild.
-4. Optionally test on TestPyPI:
-
-   ~~~sh
-   python -m twine upload --repository testpypi dist/dark_terminal_chat-2.0.0*
-   ~~~
-
-5. Publish the intended version to PyPI:
-
-   ~~~sh
-   python -m twine upload dist/dark_terminal_chat-2.0.0*
-   ~~~
-
-Older local version 1 artifacts are retained in dist; upload only the intended release. Do not put API tokens in source or shell command text. Use Twine's credentials mechanism.
-
-This release has not been uploaded. Only after a successful release under the confirmed name:
-
-~~~sh
-python -m pip install CONFIRMED_PACKAGE_NAME
-dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws
-~~~
-
-[pip also supports local files, HTTPS files, and repository URLs](https://pip.pypa.io/en/stable/getting-started/).
+[PyPI Trusted Publishing documentation](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).

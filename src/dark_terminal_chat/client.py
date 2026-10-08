@@ -23,6 +23,7 @@ from . import __version__
 from .protocol import MAX_FRAME, MAX_TEXT, SESSION, decrypt, dumps, encrypt, new_code, parse, room_keys, safe_text, valid_message
 
 RECONNECT_SECONDS = 60
+DEFAULT_SERVER = "wss://zubayr.alwaysdata.net/dark-chat/ws"
 
 
 class SessionError(Exception):
@@ -357,10 +358,13 @@ class Chat:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Two-person encrypted terminal chat.")
-    parser.add_argument("--server", default=os.environ.get("DARK_CHAT_SERVER", "ws://127.0.0.1:8080/ws"))
+    parser = argparse.ArgumentParser(prog="dark-chat", description="Two-person encrypted terminal chat.")
+    parser.add_argument("--server", default=os.environ.get("DARK_CHAT_SERVER", DEFAULT_SERVER),
+                        help="Server address (defaults to the hosted relay)")
     parser.add_argument("--name", help="Name (1-24 characters)")
-    parser.add_argument("--new", action="store_true", help="Create a chat and get an invite code")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--new", action="store_true", help="Create a chat and get an invite code")
+    mode.add_argument("--chat", action="store_true", help="Join a chat using its invite code")
     parser.add_argument("--allow-insecure", action="store_true", help="Allow ws:// on a local network")
     parser.add_argument("--ca", help="Private TLS CA certificate")
     parser.add_argument("--version", action="version", version=__version__)
@@ -373,7 +377,7 @@ def main():
             raise ValueError("Name must be 1-24 characters.")
         code = os.environ.pop("DARK_CHAT_CODE", "").strip()
         create = args.new
-        if not create and not code:
+        if not create and not args.chat and not code:
             choice = terminal.ask("Create or join? [c/j]: ").lower()
             if choice not in {"c", "j", ""}:
                 raise ValueError("Enter c to create or j to join.")
