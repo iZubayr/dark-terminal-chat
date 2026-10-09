@@ -17,13 +17,12 @@ from urllib.parse import urlsplit, urlunsplit
 from cryptography.exceptions import InvalidTag
 from prompt_toolkit import PromptSession, prompt
 from prompt_toolkit.history import DummyHistory
-from prompt_toolkit.patch_stdout import patch_stdout
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from . import __version__
 from .protocol import MAX_FRAME, MAX_TEXT, SESSION, decrypt, dumps, encrypt, new_code, parse, room_keys, safe_text, valid_message
-from .terminal_ui import chat_prompt, clear_terminal
+from .terminal_ui import chat_prompt, chat_stdout, clear_terminal
 
 RECONNECT_SECONDS = 60
 DEFAULT_SERVER = "wss://zubayr.alwaysdata.net/dark-chat/ws"
@@ -424,7 +423,7 @@ def personal_main(args, terminal, url):
     del password
     store = LocalStore(folder, identity)
     try:
-        stdout_context = patch_stdout() if terminal.interactive else contextlib.nullcontext()
+        stdout_context = chat_stdout() if terminal.interactive else contextlib.nullcontext()
         with stdout_context:
             asyncio.run(PersonalChat(terminal, store).run(url, args.ca))
     finally:
@@ -459,7 +458,7 @@ def main():
         elif not code:
             code = terminal.ask("Code: ", secret=True)
         keys = room_keys(code)
-        stdout_context = patch_stdout() if terminal.interactive else contextlib.nullcontext()
+        stdout_context = chat_stdout() if terminal.interactive else contextlib.nullcontext()
         with stdout_context:
             asyncio.run(Chat(terminal, keys, name).run(url, create, code if create else None, args.ca))
         if terminal.clean_requested is not True:

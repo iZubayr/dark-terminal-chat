@@ -1,5 +1,6 @@
 """Slash completion and terminal cleanup shared by both chat modes."""
 
+from contextlib import contextmanager
 import os
 import sys
 
@@ -8,6 +9,32 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.filters import has_completions
 from prompt_toolkit.history import DummyHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.patch_stdout import StdoutProxy, _Done
+
+
+class _ChatStdoutProxy(StdoutProxy):
+    def _write_thread(self):
+        # The default proxy sleeps to batch redraws. Python's time.sleep uses
+        # clock_nanosleep, which kills the process on iSH (missing syscall 267).
+        # Block on the existing queue instead; keep prompt-safe output and
+        # normal shutdown, without a timed sleep or changing Python globally.
+        while True:
+            item = self._flush_queue.get()
+            if isinstance(item, _Done):
+                return
+            if item:
+                self._write_and_flush(self._get_app_loop(), item)
+
+
+@contextmanager
+def chat_stdout():
+    with _ChatStdoutProxy() as proxy:
+        original_stdout, original_stderr = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = proxy
+        try:
+            yield
+        finally:
+            sys.stdout, sys.stderr = original_stdout, original_stderr
 
 
 class CommandCompleter(Completer):

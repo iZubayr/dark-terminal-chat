@@ -6,6 +6,8 @@ Plain English terminal chat. No banner, logo, animation, or forced color. Python
 pip install --upgrade dark-chat
 ~~~
 
+[iPhone / iSH installation and login](docs/ish.md).
+
 ## Temporary chat
 
 ~~~sh
