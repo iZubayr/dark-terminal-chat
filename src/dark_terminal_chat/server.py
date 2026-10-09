@@ -8,6 +8,8 @@ import re
 import secrets
 import signal
 import time
+import sqlite3
+from pathlib import Path
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from urllib.parse import urlsplit
@@ -34,12 +36,14 @@ class Room:
 
 
 class Relay:
-    def __init__(self, max_clients=128, reconnect_seconds=RECONNECT_SECONDS):
+    def __init__(self, max_clients=128, reconnect_seconds=RECONNECT_SECONDS, database_path=None):
         self.rooms = {}
         self.clients = set()
         self.max_clients = max_clients
         self.reconnect_seconds = reconnect_seconds
         self.tasks = set()
+        from .storage import Mailbox
+        self.mailbox = Mailbox(database_path) if database_path is not None else None
 
     @staticmethod
     def http_request(connection, request):
@@ -94,6 +98,9 @@ class Relay:
         for task in self.tasks:
             task.cancel()
         self.rooms.clear()
+        if self.mailbox:
+            self.mailbox.close()
+            self.mailbox = None
 
     async def handler(self, ws):
         if len(self.clients) >= self.max_clients:
@@ -104,6 +111,10 @@ class Relay:
         left = False
         try:
             frame = parse(await asyncio.wait_for(ws.recv(), timeout=10))
+            if frame.get("type") == "account" and frame.get("version") == 1:
+                from .account_server import account_session
+                await account_session(self, ws)
+                return
             room_id, session, action = frame.get("room"), frame.get("session"), frame.get("type")
             if (not isinstance(action, str) or action not in {"create", "join", "resume"}
                     or not isinstance(room_id, str) or not re.fullmatch(r"[a-f0-9]{64}", room_id)
@@ -186,6 +197,8 @@ class Relay:
         except (ValueError, TimeoutError, asyncio.TimeoutError, UnicodeError):
             left = True
             await ws.close(code=1008, reason="Invalid protocol")
+        except sqlite3.Error:
+            await self.reject(ws, "storage", "Storage unavailable. Try again later.")
         finally:
             self.clients.discard(ws)
             room = self.rooms.get(room_id) if isinstance(room_id, str) else None
@@ -208,7 +221,7 @@ class Relay:
 
 
 async def run(args):
-    relay = Relay(args.max_clients)
+    relay = Relay(args.max_clients, database_path=args.database)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -226,10 +239,11 @@ async def run(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Two-person encrypted chat server.")
+    parser = argparse.ArgumentParser(description="Encrypted chat and mailbox server.")
     parser.add_argument("--host", default=os.environ.get("IP", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=os.environ.get("PORT", "8080"))
     parser.add_argument("--max-clients", type=int, default=128)
+    parser.add_argument("--database", default=os.environ.get("DARK_CHAT_DATABASE", str(Path.home() / ".dark-chat-server" / "mailbox.db")))
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535 or not 1 <= args.max_clients <= 1024:

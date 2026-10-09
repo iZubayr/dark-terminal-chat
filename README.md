@@ -1,134 +1,117 @@
 # Dark Terminal Chat
 
-A plain, English terminal chat for two people. No banner, logo, animation, or forced color. Python 3.10 or newer is required. The client and WebSocket server install from the same Python package.
-
-Version 2 uses a new session protocol. Use version 2 clients and servers together. Source: [GitHub](https://github.com/iZubayr/dark-terminal-chat).
-
-## Install
-
-Install from [PyPI](https://pypi.org/project/dark-chat/):
+Plain English terminal chat. No banner, logo, animation, or forced color. Python 3.10+.
 
 ~~~sh
-pip install dark-chat
+pip install --upgrade dark-chat
 ~~~
 
-Create a chat:
+## Temporary chat
 
 ~~~sh
 dark-chat --new
-~~~
-
-Join a chat:
-
-~~~sh
 dark-chat --chat
 ~~~
 
-Enter your name when asked. The creator receives a code and shares it with the peer. The peer enters that code when asked. Both commands connect to the hosted server automatically.
+The creator gets a secret invite code. Share it privately with the other person; they enter it at the prompt. Both commands use the hosted relay automatically. Each room has two slots. Temporary messages are never saved or queued. A disconnected participant has 60 seconds to reconnect. When both participants leave, or the server restarts, the old invite stops working.
 
-For development, install from this folder on Windows:
+## Permanent ID and offline messages
 
-~~~powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install .
-~~~
-
-On Linux or macOS:
+Both people register once on their own devices:
 
 ~~~sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install .
+dark-chat --register
 ~~~
 
-The package provides two commands: dark-chat and dark-chat-server. You can also use python -m dark_terminal_chat and python -m dark_terminal_chat.server.
+Choose a strong password of at least 12 characters and a display name. Registration creates private keys on this device and publishes only the public keys. Your 64-character ID is a fingerprint of those keys. Share and compare the full ID with your friend through a trusted channel. A display name alone is not proof of identity.
 
-## Local use
-
-Open three terminals with the Python environment activated.
+Open your account:
 
 ~~~sh
-# Server
-dark-chat-server
-
-# Creator
-dark-chat --server ws://127.0.0.1:8080/ws --new --name elliot
-
-# Peer, in another terminal
-dark-chat --server ws://127.0.0.1:8080/ws --chat --name whiterose
+dark-chat --login
 ~~~
 
-The creator receives a line starting with "Code:". The peer pastes that code at "Code:". The code is hidden while entering it. If no name is supplied, the program asks "Name:". Running dark-chat without either mode asks "Create or join? [c/j]:".
-
-The interface contains only prompts, messages, and relevant connection/error notices. Example:
+Enter your password. Inside the chat, select your friend and optionally save a local name:
 
 ~~~text
-Code: <invite code>
-Waiting for peer.
-whiterose joined.
-whiterose> Hello.
-elliot>
+/chat <friend's full ID> alice
+Hello.
 ~~~
 
-On Windows, chat.cmd and server.cmd use this folder's .venv when available.
+Next time, `/chat alice` opens that conversation. The friend must have registered, but need not be online. Incoming messages from other contacts produce a notice with their full ID; select that contact to read the conversation.
 
-## Session rules
+Outgoing messages are saved encrypted on your device before sending. `Queued.` means the local outbox accepted the message; it is not a read receipt. The outbox retries automatically. The relay keeps encrypted messages until the recipient has saved and acknowledged them, for at most 30 days. Undelivered messages older than 30 days need to be sent again as a new message. The last 50 locally saved messages appear when opening a conversation. `/history` shows them again.
 
-- Each chat has two participant slots. A third participant is refused.
-- Leaving with /exit or Ctrl+C releases the participant's slot immediately while connected.
-- When both participants leave, the room is removed. Joining with its old code fails; create a new chat for a new code.
-- A dropped connection reserves the same participant's slot for 60 seconds. Only that participant's in-memory resume token can reclaim it.
-- The client tries to reconnect for up to 60 seconds. When a server restarts, room state is lost and a new chat is needed.
-- Sending is paused while the peer is offline. The draft remains editable.
-- Messages are not queued or automatically resent. If receipt isn't confirmed, the draft is kept and a short notice is shown. A lost receipt can mean the peer already saw the message; check before manually resending.
-- Messages and drafts are not written to files. Old messages are not replayed after reconnecting.
-
-## Internet use
-
-The deployed server is available at wss://zubayr.alwaysdata.net/dark-chat/ws:
-
-~~~sh
-dark-chat --new
-dark-chat --chat
-~~~
-
-Share the code with the peer. To use your own relay, pass --server wss://YOUR_SERVER/ws. Use wss:// for internet connections. TLS certificates are checked; --ca ca.pem supports a private certificate authority.
-
-DARK_CHAT_SERVER can override the default relay. --server overrides that environment variable. DARK_CHAT_CODE is supported for non-interactive clients; interactive clients ask for the code instead.
-
-For local Wi-Fi, use --host 0.0.0.0 on the server and --server ws://LAN_IP:8080/ws --allow-insecure on clients.
-
-[AlwaysData setup beside MediaHub](docs/alwaysdata.md).
+The password unlocks this device's identity; it is never sent to the server. Logging in on another computer requires your encrypted identity backup as well as the password. Use one active device per identity; multi-device history synchronization is not provided.
 
 ## Commands
 
+Type `/` to display the command menu. Choose with the arrow keys and press Enter. `/clean` is the first option; `/` followed by Enter selects it. Typing `clean` also works.
+
 | Command | Action |
 | --- | --- |
-| /help | List commands |
-| /who | Show the connected participants whose names are known |
-| /clear | Clear the screen |
-| /exit or Ctrl+C | Leave |
+| `/clean` or `clean` | Close the chat and clear the terminal screen and supported scrollback |
+| `/exit` or Ctrl+C | Close the chat |
+| `/clear` | Clear the screen and stay in the chat |
+| `/help` | Show commands |
+| `/who` | Show temporary-room participants |
+| `/chat ID [name]` | Open a permanent conversation; optionally name the contact locally |
+| `/chat name` | Open a saved contact |
+| `/contacts` | List saved contact IDs and local names |
+| `/id` | Show your permanent ID |
+| `/history` | Show the selected conversation's recent saved messages |
+| `/backup` | Create an encrypted identity backup and print its path |
 
-## Privacy
+`/clean` exits dark-chat and returns to the shell. It does not close the shell window or delete saved conversations, backups, terminal recordings, screenshots, or operating-system memory. Scrollback clearing depends on the terminal; it is not secure forensic erasure.
 
-Messages and names are encrypted on the client with AES-256-GCM. Keys are derived from a random 32-byte invite code with HKDF-SHA256. The invite code is never sent to the relay. The relay sees opaque room/session identifiers, IP addresses, message sizes, timing, and delivery-control metadata.
+## Identity backup and recovery
 
-An invite code is shared access, and a name is not verified identity. Keep the code private. The terminal scrollback may retain displayed messages and the creator's code; /clear is not secure erasure. There is no forward secrecy, anonymity guarantee, or independent security audit.
+While logged in, run `/backup`. Move the resulting encrypted file to a safe location on another device. It contains private keys, encrypted with your existing password. It does not contain conversation history. Anyone with both the backup and password can use your identity and decrypt messages addressed to it.
 
-The relay holds only session metadata and temporary network buffers. There is no message history or application-level message queue. The default server limit is 128 connections/rooms, with two participant slots per room and a 40-packet limit per connection per 10 seconds. Run one relay process; separate instances do not share rooms.
-
-## Build and check
+On a new device:
 
 ~~~sh
+dark-chat --restore /path/to/identity-backup.json
+dark-chat --login
+~~~
+
+Restore refuses to overwrite an existing identity. There is no server-side password reset or private-key recovery. For a complete local backup, close all clients and copy the whole `~/.dark-chat` directory. History is encrypted and tied to the identity. `DARK_CHAT_HOME` selects a different profile directory.
+
+## Security model
+
+Permanent messages use [libsodium sealed boxes through PyNaCl](https://pynacl.readthedocs.io/en/latest/public/#nacl-public-sealedbox) and Ed25519 signatures. Clients verify the sender's key fingerprint and signature, the intended recipient, and the full peer ID before accepting a retrieved public key. Authentication signs a fresh server challenge; old responses cannot log in again. Message IDs and durable acknowledgments suppress retries and replay. The server never receives private keys, account passwords, contact aliases, or decrypted message text.
+
+The identity file uses AES-256-GCM with a random salt/nonce and scrypt (`N=131072, r=8, p=1`) to protect against offline password guessing. Local message bodies and contact names use AES-256-GCM under an independent random storage key kept inside the encrypted identity. Files are owner-only on Unix; Windows uses the profile directory's inherited access permissions, plus encryption. Names/text received from peers are stripped of terminal control characters.
+
+Temporary rooms continue to use AES-256-GCM with keys derived from their random 32-byte invite codes. A shared invite grants room access; it is not a permanent identity. Version 3 supports version 2 temporary clients. Permanent accounts require a version 3 server.
+
+Public Internet connections require verified WSS/TLS. Account mode refuses insecure remote/LAN connections even if `--allow-insecure` is supplied. Local loopback WS is available for development.
+
+The relay sees IP addresses, public IDs/keys, sender/recipient relationships, timing, sizes, and delivery metadata. The local database exposes contact IDs and message metadata, although bodies and names are encrypted. There is no anonymity guarantee, forward secrecy against later compromise of a recipient's long-term private key, independent security audit, or protection from malware on an unlocked device. Sealed messages are signed, so they are not deniable. Terminal clearing does not change these limits.
+
+## Hosting
+
+The default relay is `wss://zubayr.alwaysdata.net/dark-chat/ws`. Advanced options remain available but are hidden from the short help: `--server`, `--name`, `--ca`, `--allow-insecure`, `--password-file`, and `--restore`. `DARK_CHAT_SERVER` overrides the relay; `DARK_CHAT_CODE` provides a temporary invite for automation. `--password-file` reads a protected local file for automation; do not put passwords directly on a command line.
+
+~~~sh
+dark-chat-server --database /persistent/private/path/mailbox.db
+dark-chat --server ws://127.0.0.1:8080/ws --new
+~~~
+
+Run one relay process. Its default database is `~/.dark-chat-server/mailbox.db`, outside release directories; `DARK_CHAT_DATABASE` overrides it. Never put it in `.deploy/releases`. The server keeps ciphertext only and bounds storage to 1,000 identities, 1,000 pending messages overall, 100 pending messages per recipient, and 10,000 pending-message/delivery-receipt rows. A full mailbox returns an error while the encrypted outbox stays on the sender's device. Delivered ciphertext is deleted after acknowledgment; replay receipts expire after 30 days. Pending mail and public identities survive normal restarts and upgrades. Availability and backups of the server database remain the operator's responsibility.
+
+[AlwaysData setup and automatic updates](docs/alwaysdata.md). [Package distribution](docs/distribution.md).
+
+## Development
+
+~~~sh
+python -m venv .venv
 python -m pip install -e . build twine
 python -m unittest discover -s tests -v
 python -m build
 python -m twine check dist/*
 ~~~
 
-[Package distribution](docs/distribution.md).
+Activate the virtual environment before installing. GitHub Actions tests installed wheels on Linux (Python 3.10 and 3.12) and Windows (Python 3.12). Only passing commits advance the deployment branch; AlwaysData tests the candidate again before activation. Tests cover offline delivery, database persistence, signatures, challenge replay, recipient isolation, key substitution, local encryption, CLI flows, and slash completion. A local test run does not establish live production behavior.
 
-GitHub Actions tests the installed wheel on Linux with Python 3.10/3.12 and on Windows with Python 3.12. After all jobs pass, it advances the deploy branch. AlwaysData checks that branch every five minutes and tests the candidate again before changing the running version. See [automatic updates](docs/alwaysdata.md#automatic-updates).
-
-The earlier Node.js TCP experiment remains as reference source only. It does not support the current session protocol. The Python client/server is the application.
+The earlier Node.js experiment is reference source only. The Python package is the application.

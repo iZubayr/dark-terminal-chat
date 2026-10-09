@@ -10,6 +10,8 @@ import sys
 import threading
 import time
 import uuid
+from pathlib import Path
+import sqlite3
 from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.exceptions import InvalidTag
@@ -21,6 +23,7 @@ from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from . import __version__
 from .protocol import MAX_FRAME, MAX_TEXT, SESSION, decrypt, dumps, encrypt, new_code, parse, room_keys, safe_text, valid_message
+from .terminal_ui import chat_prompt, clear_terminal
 
 RECONNECT_SECONDS = 60
 DEFAULT_SERVER = "wss://zubayr.alwaysdata.net/dark-chat/ws"
@@ -49,6 +52,7 @@ def server_url(value, allow_insecure=False):
 class Terminal:
     def __init__(self):
         self.interactive = sys.stdin.isatty() and sys.stdout.isatty()
+        self.clean_requested = False
 
     def say(self, text):
         print(safe_text(text), flush=True)
@@ -182,7 +186,7 @@ class Chat:
     async def send_input(self):
         terminal = self.terminal
         if terminal.interactive:
-            session = PromptSession(history=DummyHistory())
+            session = chat_prompt()
 
             async def read():
                 return await session.prompt_async(f"{self.name}> ", default=self.draft)
@@ -223,16 +227,18 @@ class Chat:
                     continue
                 if command in {"/exit", "/quit"}:
                     return
+                if command in {"/clean", "clean"}:
+                    terminal.clean_requested = True
+                    return
                 if command == "/help":
-                    terminal.say("/who  /clear  /exit")
+                    terminal.say("/who  /clear  /clean  /exit")
                 elif command == "/who":
                     names = [peer["name"] for sid, peer in self.peers.items()
                              if sid in self.online and peer["online"]]
                     terminal.say(f"Participants: {', '.join([self.name, *names])}")
                 elif command == "/clear":
                     if terminal.interactive:
-                        sys.stdout.write("\x1b[2J\x1b[H")
-                        sys.stdout.flush()
+                        clear_terminal()
                 elif command.startswith("/"):
                     terminal.say("Unknown command. Use /help.")
                 elif len(text) > MAX_TEXT:
@@ -357,21 +363,87 @@ class Chat:
                                  return_exceptions=True)
 
 
-def main():
-    parser = argparse.ArgumentParser(prog="dark-chat", description="Two-person encrypted terminal chat.")
+def argument_parser():
+    parser = argparse.ArgumentParser(prog="dark-chat", description="Encrypted terminal chat.", allow_abbrev=False,
+                                     epilog="Inside chat: type / for commands. /clean clears the terminal and exits.")
     parser.add_argument("--server", default=os.environ.get("DARK_CHAT_SERVER", DEFAULT_SERVER),
-                        help="Server address (defaults to the hosted relay)")
-    parser.add_argument("--name", help="Name (1-24 characters)")
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--name", help=argparse.SUPPRESS)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--new", action="store_true", help="Create a chat and get an invite code")
-    mode.add_argument("--chat", action="store_true", help="Join a chat using its invite code")
-    parser.add_argument("--allow-insecure", action="store_true", help="Allow ws:// on a local network")
-    parser.add_argument("--ca", help="Private TLS CA certificate")
+    mode.add_argument("--new", action="store_true", help="Create a temporary chat")
+    mode.add_argument("--chat", action="store_true", help="Join with an invite code")
+    mode.add_argument("--register", action="store_true", help="Create your permanent ID")
+    mode.add_argument("--login", action="store_true", help="Open your saved chats")
+    mode.add_argument("--restore", metavar="FILE", help=argparse.SUPPRESS)
+    parser.add_argument("--allow-insecure", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--ca", help=argparse.SUPPRESS)
+    parser.add_argument("--password-file", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=__version__)
+    return parser
+
+
+def personal_main(args, terminal, url):
+    from .personal import AccountConnection, PersonalChat
+    from .storage import LocalStore, create_vault, default_home, private_directory, private_write, read_vault
+    folder = default_home()
+    if args.register and (folder / "identity.json").exists():
+        raise ValueError("An identity already exists. Use --login.")
+    if args.login and not (folder / "identity.json").exists():
+        raise ValueError("No identity on this device. Use --register or restore your encrypted backup.")
+    if args.password_file:
+        password_path = Path(args.password_file)
+        if password_path.stat().st_size > 4096:
+            raise ValueError("Invalid password file.")
+        password = password_path.read_text(encoding="utf-8").rstrip("\r\n")
+    else:
+        password = terminal.ask("Password: ", secret=True)
+    if args.register:
+        if not args.password_file and password != terminal.ask("Confirm password: ", secret=True):
+            raise ValueError("Passwords do not match.")
+        name = safe_text(args.name if args.name is not None else terminal.ask("Name: ")).strip()
+        identity = create_vault(folder, name, password)
+        terminal.say("Identity saved on this device. Keep your password and an encrypted backup.")
+        terminal.say(f"ID: {identity.id}")
+
+        async def register():
+            async with AccountConnection(url, identity, args.ca):
+                pass
+
+        asyncio.run(register())
+        terminal.say("Registered. Use --login to chat.")
+        return
+    if args.restore:
+        read_vault(args.restore, password)
+        private_directory(folder)
+        if (folder / "identity.json").exists():
+            raise ValueError("An identity already exists. Restore into a separate DARK_CHAT_HOME directory.")
+        private_write(folder / "identity.json", Path(args.restore).read_bytes())
+        terminal.say("Identity restored. Use --login. History is not included in identity backups.")
+        return
+    identity = read_vault(folder / "identity.json", password)
+    del password
+    store = LocalStore(folder, identity)
+    try:
+        stdout_context = patch_stdout() if terminal.interactive else contextlib.nullcontext()
+        with stdout_context:
+            asyncio.run(PersonalChat(terminal, store).run(url, args.ca))
+    finally:
+        store.close()
+
+
+def main():
+    parser = argument_parser()
     args = parser.parse_args()
     terminal = Terminal()
     try:
         url = server_url(args.server, args.allow_insecure)
+        if args.register or args.login or args.restore:
+            # Permanent identities may never authenticate over plaintext Internet/LAN links.
+            url = server_url(args.server)
+            if args.ca and not url.startswith("wss://"):
+                raise ValueError("--ca requires wss://.")
+            personal_main(args, terminal, url)
+            return
         name = safe_text(args.name if args.name is not None else terminal.ask("Name: ")).strip()
         if not 1 <= len(name) <= 24:
             raise ValueError("Name must be 1-24 characters.")
@@ -390,16 +462,23 @@ def main():
         stdout_context = patch_stdout() if terminal.interactive else contextlib.nullcontext()
         with stdout_context:
             asyncio.run(Chat(terminal, keys, name).run(url, create, code if create else None, args.ca))
-        terminal.say("Closed.")
+        if terminal.clean_requested is not True:
+            terminal.say("Closed.")
     except (KeyboardInterrupt, EOFError):
         terminal.say("Closed.")
     except SessionError as error:
         terminal.say(str(error))
         raise SystemExit(1) from None
+    except (InvalidTag, sqlite3.Error):
+        terminal.say("Unable to read encrypted local storage. Check your identity backup.")
+        raise SystemExit(1) from None
     except (ValueError, OSError, ConnectionClosed, ConnectionError, TimeoutError, asyncio.TimeoutError, InvalidHandshake) as error:
         detail = str(error) if isinstance(error, ValueError) else type(error).__name__
         terminal.say(f"Error: {detail}")
         raise SystemExit(1) from None
+    finally:
+        if terminal.clean_requested is True:
+            clear_terminal(scrollback=True)
 
 
 if __name__ == "__main__":

@@ -66,9 +66,11 @@ The creator shares the invite code with the peer. Confirm messages arrive in bot
 
 ## Restarts and upgrades
 
-Use version 2 clients with a version 2 server. The session protocol is incompatible with version 1.
+Version 3 supports version 2 temporary clients and adds permanent accounts. Permanent accounts require version 3 clients and server. Version 1 remains incompatible.
 
 Run one relay process. Rooms are in memory, so a server restart ends existing sessions and invalidates join codes. Clients handle ordinary connection drops for 60 seconds; they cannot reconstruct rooms after a server restart.
+
+Permanent accounts and pending encrypted messages live in `/home/ACCOUNT/.dark-chat-server/mailbox.db` by default, outside the clone and generated release environments. The default path is the same whether an old or new supervisor starts the release. `DARK_CHAT_DATABASE` can override it; always use an absolute persistent path. Do not store it under `.deploy/releases`. Back up this database separately. Local client keys/history live on the users' devices and are not part of server backups. Pending ciphertext expires after 30 days and is removed after the recipient's acknowledgment.
 
 For a 503 response, check this site's startup log, command, environment, and IP/PORT. If health works but chat doesn't, check the public WSS URL, Trim path, TLS, and site settings affecting WebSocket connections.
 
@@ -92,6 +94,6 @@ Scheduled task command (replace ACCOUNT):
 
 The bootstrap uses the approved upstream updater, so fixes to deployment itself can take effect. The updater fetches the deploy branch published by GitHub Tests, verifies that its commit belongs to main, and builds a separate release environment. Before building, it removes inactive generated release environments inside this clone to fit the hosting disk quota; the current release is preserved. It runs the tests there before fast-forwarding the clone and atomically changing .deploy/current. Pip runs in isolated mode with --no-user and --no-cache-dir. The supervisor then restarts only the chat child process. No GitHub SSH private key, API token, or unauthenticated GitHub API call is needed on the server.
 
-Failed tests, failed installs, local edits, or diverged commits leave the active release unchanged. A lock prevents overlapping updates. The current release and one candidate are retained; older environments can be rebuilt from Git if needed. A successful upgrade ends any current chats because rooms exist only in memory.
+Failed tests, failed installs, local edits, or diverged commits leave the active release unchanged. A lock prevents overlapping updates. The current release and one candidate are retained; older environments can be rebuilt from Git if needed. A successful upgrade ends temporary rooms. Permanent clients reconnect, and their mailbox database survives the release switch.
 
 For a manual update, run python3 scripts/update.py from the clone. The scheduled task uses the same path. To roll back, point .deploy/current at a known previous release; the supervisor notices the change. Disable the scheduled task while investigating so it does not immediately reapply main.

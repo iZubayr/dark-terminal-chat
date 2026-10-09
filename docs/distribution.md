@@ -1,11 +1,13 @@
 # Distributing dark-chat
 
-The package name and client command are both dark-chat. Python 3.10+ is required. Version 2.1.0 connects to wss://zubayr.alwaysdata.net/dark-chat/ws by default.
+The package name and client command are both dark-chat. Python 3.10+ is required. Version 3.0.0 connects to wss://zubayr.alwaysdata.net/dark-chat/ws by default.
 
 The public client commands are:
 
 ~~~sh
 pip install dark-chat
+dark-chat --register
+dark-chat --login
 dark-chat --new
 dark-chat --chat
 ~~~
@@ -15,9 +17,9 @@ The creator shares the code with the peer. Names and codes are entered at the te
 ## Build and verify
 
 ~~~sh
-python -m build --outdir dist/2.1.0
-python -m twine check dist/2.1.0/*
-python -m pip install dist/2.1.0/dark_chat-2.1.0-py3-none-any.whl
+python -m build --outdir dist/3.0.0
+python -m twine check dist/3.0.0/*
+python -m pip install dist/3.0.0/dark_chat-3.0.0-py3-none-any.whl
 python -m pip check
 python -m unittest discover -s tests -v
 dark-chat --version

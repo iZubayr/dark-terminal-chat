@@ -331,7 +331,7 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
             return session
 
         with create_pipe_input() as pipe, create_app_session(input=pipe, output=DummyOutput()):
-            with patch("dark_terminal_chat.client.PromptSession", side_effect=make_session):
+            with patch("dark_terminal_chat.terminal_ui.PromptSession", side_effect=make_session):
                 task = asyncio.create_task(chat.send_input())
                 try:
                     await self.until(lambda: len(sessions) == 1)
