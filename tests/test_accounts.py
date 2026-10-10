@@ -264,6 +264,10 @@ class AccountServerTests(unittest.IsolatedAsyncioTestCase):
         store = LocalStore(self.root / "reconnecting", self.alice)
         self.addCleanup(store.close)
         chat = PersonalChat(terminal, store)
+        store.add_contact(self.bob.public, "buddy")
+        packet = seal_message(self.bob, self.alice.public, "history shown only once")
+        store.save(packet, {"name": "bob", "text": "history shown only once"}, "in")
+        await chat.select("buddy")
         task = asyncio.create_task(chat.network(self.url, None))
 
         async def until(predicate):
@@ -284,6 +288,8 @@ class AccountServerTests(unittest.IsolatedAsyncioTestCase):
             await until(lambda: chat.connection is not None and chat.connection is not previous)
             self.assertIsNotNone(self.relay.mailbox.lookup(self.alice.id))
             self.assertIn("Reconnected.", [call.args[0] for call in terminal.say.call_args_list])
+            self.assertEqual([call.args[0] for call in terminal.say.call_args_list].count(
+                "bob> history shown only once"), 1)
         finally:
             chat.finished.set()
             await asyncio.wait_for(task, 5)
@@ -306,7 +312,7 @@ class AccountServerTests(unittest.IsolatedAsyncioTestCase):
 
         async def launch(name):
             child = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "dark_terminal_chat", "--login", "--password-file", str(password_file),
+                sys.executable, "-m", "dark_terminal_chat", "--password-file", str(password_file),
                 "--server", self.url, env={**os.environ, "DARK_CHAT_HOME": str(homes[name]), "PYTHONIOENCODING": "utf-8"},
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
             children.append(child)

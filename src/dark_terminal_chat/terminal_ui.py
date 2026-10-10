@@ -6,7 +6,6 @@ import sys
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.filters import has_completions
 from prompt_toolkit.history import DummyHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.patch_stdout import StdoutProxy, _Done
@@ -38,7 +37,8 @@ def chat_stdout():
 
 
 class CommandCompleter(Completer):
-    def __init__(self, personal=False):
+    def __init__(self, personal=False, contacts=None):
+        self.contacts = contacts
         self.commands = {"/clean": "Clear terminal and exit", "/exit": "Exit chat",
                          "/help": "Show commands", "/clear": "Clear screen"}
         if personal:
@@ -50,13 +50,21 @@ class CommandCompleter(Completer):
 
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
+        if text.startswith('/chat ') and self.contacts:
+            query = text[6:]
+            for number, (uid, contact) in enumerate(self.contacts().items(), 1):
+                alias = contact['alias']
+                candidate = str(number) if alias == uid else alias
+                if candidate.startswith(query):
+                    yield Completion(candidate, start_position=-len(query), display_meta=uid)
+            return
         if text.startswith("/") and " " not in text:
             for command, description in self.commands.items():
                 if command.startswith(text):
                     yield Completion(command, start_position=-len(text), display_meta=description)
 
 
-def chat_prompt(personal=False, **kwargs):
+def chat_prompt(personal=False, contacts=None, **kwargs):
     bindings = KeyBindings()
 
     @bindings.add("enter", eager=True)
@@ -64,13 +72,18 @@ def chat_prompt(personal=False, **kwargs):
         buffer = event.current_buffer
         state = buffer.complete_state
         if state and state.completions:
-            buffer.apply_completion(state.current_completion or state.completions[0])
+            # A partial contact name must not silently select the first person.
+            completion = state.current_completion
+            if completion is None and " " not in buffer.text:
+                completion = state.completions[0]
+            if completion is not None:
+                buffer.apply_completion(completion)
         elif buffer.text == "/":
             buffer.text = "/clean"
             buffer.cursor_position = len(buffer.text)
         buffer.validate_and_handle()
 
-    return PromptSession(history=DummyHistory(), completer=CommandCompleter(personal),
+    return PromptSession(history=DummyHistory(), completer=CommandCompleter(personal, contacts),
                          complete_while_typing=True, key_bindings=bindings, **kwargs)
 
 

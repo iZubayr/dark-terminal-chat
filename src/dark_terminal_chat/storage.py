@@ -120,7 +120,7 @@ class LocalStore:
         return json.loads(AESGCM(self.identity.storage_key).decrypt(value[:12], value[12:], tag.encode()))
 
     def contacts(self):
-        return {uid: self.decrypt("contact:" + uid, body) for uid, body in self.db.execute("SELECT id,body FROM contacts")}
+        return {uid: self.decrypt("contact:" + uid, body) for uid, body in self.db.execute("SELECT id,body FROM contacts ORDER BY rowid")}
 
     def add_contact(self, public, alias):
         uid = fingerprint(public)
@@ -138,9 +138,9 @@ class LocalStore:
     def rename_contact(self, uid, alias):
         from .protocol import safe_text
         contacts = self.contacts()
-        if (uid not in contacts or not 1 <= len(alias) <= 24 or safe_text(alias) != alias
+        if (uid not in contacts or not 1 <= len(alias) <= 24 or safe_text(alias) != alias or alias.isdecimal()
                 or any(other != uid and contact["alias"] == alias for other, contact in contacts.items())):
-            raise ValueError("Choose an unused contact name of 1-24 printable characters.")
+            raise ValueError("Choose an unused contact name of 1-24 printable characters, not just a number.")
         with self.db:
             self.db.execute("UPDATE contacts SET body=? WHERE id=?",
                             (self.encrypt("contact:" + uid, {**contacts[uid], "alias": alias}), uid))
@@ -153,23 +153,35 @@ class LocalStore:
                                      (frame["id"], uid, direction, int(pending), self.encrypt(tag, {"envelope": frame, **content})))
         return cursor.rowcount == 1
 
-    def messages(self, peer=None, pending=False, limit=100):
+    def messages(self, peer=None, pending=False, limit=100, exclude_peers=()):
         sql, values = "SELECT id,peer,direction,pending,body FROM history WHERE 1=1", []
         if peer:
             sql += " AND peer=?"
             values.append(peer)
         if pending:
             sql += " AND pending=1"
-        sql += " ORDER BY rowid DESC LIMIT ?"
+        if exclude_peers:
+            sql += " AND peer NOT IN (" + ",".join("?" for _ in exclude_peers) + ")"
+            values.extend(exclude_peers)
+        sql += " ORDER BY rowid " + ("ASC" if pending else "DESC") + " LIMIT ?"
         values.append(limit)
         rows = self.db.execute(sql, values).fetchall()
         return [{"id": mid, "peer": uid, "direction": direction, "pending": bool(queued),
                  **self.decrypt(f"message:{mid}:{uid}:{direction}", body)}
-                for mid, uid, direction, queued, body in reversed(rows)]
+                for mid, uid, direction, queued, body in (rows if pending else reversed(rows))]
 
     def sent(self, mid):
         with self.db:
             self.db.execute("UPDATE history SET pending=0 WHERE id=? AND direction='out'", (mid,))
+
+    def expire(self, mid):
+        row = self.db.execute("SELECT peer,body FROM history WHERE id=? AND direction='out' AND pending=1", (mid,)).fetchone()
+        if row:
+            uid, body = row
+            tag = f"message:{mid}:{uid}:out"
+            content = {**self.decrypt(tag, body), "expired": True}
+            with self.db:
+                self.db.execute("UPDATE history SET pending=0,body=? WHERE id=?", (self.encrypt(tag, content), mid))
 
     def backup(self):
         destination = private_directory(self.folder / "backups") / ("identity-" + secrets.token_hex(8) + ".json")

@@ -8,9 +8,9 @@ iSH emulates a subset of Linux system calls. Installing the package alone does n
 
 ~~~sh
 . ~/darkchat/bin/activate
-python3 -m pip install --upgrade dark-chat==3.0.1
+python3 -m pip install --upgrade dark-chat
 dark-chat --version
-dark-chat --login
+dark-chat
 ~~~
 
 Enter the password chosen when registering. The existing identity remains in `~/.dark-chat`; upgrading the package does not replace it. Do not register again after closing iSH.
@@ -19,10 +19,12 @@ On subsequent launches:
 
 ~~~sh
 . ~/darkchat/bin/activate
-dark-chat --login
+dark-chat
 ~~~
 
-Inside the chat, use `/chat FULL_PEER_ID friend` once, then `/chat friend`. Use `/backup` to create an encrypted identity backup, and keep it outside iSH in case the app or filesystem is removed. `/clean` clears the supported terminal screen/scrollback and exits the chat; it preserves the identity and saved history.
+Version 3.1.0 opens the saved identity automatically. Inside the chat, use `/chat FULL_PEER_ID friend` once, then `/chat friend` or `/chat 1`. `/chat` lists contacts. Use `/backup` to create an encrypted identity backup, and keep it outside iSH in case the app or filesystem is removed. `/clean` clears the supported terminal screen/scrollback and exits the chat; it preserves the identity and saved history.
+
+To launch without activating the environment each time, use `~/darkchat/bin/dark-chat`. This still reads the same identity and history.
 
 ## New environment
 
@@ -37,8 +39,7 @@ python3 --version
 python3 -m venv --without-pip --system-site-packages ~/darkchat
 . ~/darkchat/bin/activate
 python3 -m pip install dark-chat
-dark-chat --register
-dark-chat --login
+dark-chat
 ~~~
 
 `--without-pip` skips slow pip bootstrapping under emulation. The system pip remains visible through `--system-site-packages`; always invoke it with the environment's `python3 -m pip`.

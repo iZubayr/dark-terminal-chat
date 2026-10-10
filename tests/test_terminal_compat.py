@@ -148,7 +148,7 @@ class RestrictedTerminalTests(unittest.IsolatedAsyncioTestCase):
                         bob, alice.public, "offline Unicode أَهْلًا 👋")}, "stored")
                 loop.add_reader(master, collect)
                 child = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "dark_terminal_chat", "--login",
+                    sys.executable, "-m", "dark_terminal_chat",
                     "--password-file", str(password_file), "--server", url,
                     env={**os.environ, "DARK_CHAT_HOME": str(root / "alice"),
                          "PYTHONIOENCODING": "utf-8", "PROMPT_TOOLKIT_NO_CPR": "1", "TERM": "xterm"},

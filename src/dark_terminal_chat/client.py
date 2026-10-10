@@ -15,7 +15,7 @@ import sqlite3
 from urllib.parse import urlsplit, urlunsplit
 
 from cryptography.exceptions import InvalidTag
-from prompt_toolkit import PromptSession, prompt
+from prompt_toolkit import prompt
 from prompt_toolkit.history import DummyHistory
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
@@ -58,7 +58,7 @@ class Terminal:
 
     def ask(self, text, secret=False):
         if not self.interactive:
-            raise ValueError("Use an interactive terminal, or provide --name and DARK_CHAT_CODE.")
+            raise ValueError("Open dark-chat in an interactive terminal to answer the prompts.")
         return prompt(text, is_password=secret, history=DummyHistory()).strip()
 
 
@@ -363,7 +363,7 @@ class Chat:
 
 
 def argument_parser():
-    parser = argparse.ArgumentParser(prog="dark-chat", description="Encrypted terminal chat.", allow_abbrev=False,
+    parser = argparse.ArgumentParser(prog="dark-chat", description="Encrypted terminal chat. Run dark-chat to register or log in.", allow_abbrev=False,
                                      epilog="Inside chat: type / for commands. /clean clears the terminal and exits.")
     parser.add_argument("--server", default=os.environ.get("DARK_CHAT_SERVER", DEFAULT_SERVER),
                         help=argparse.SUPPRESS)
@@ -385,8 +385,12 @@ def personal_main(args, terminal, url):
     from .personal import AccountConnection, PersonalChat
     from .storage import LocalStore, create_vault, default_home, private_directory, private_write, read_vault
     folder = default_home()
-    if args.register and (folder / "identity.json").exists():
-        raise ValueError("An identity already exists. Use --login.")
+    path = folder / "identity.json"
+    if args.register and path.exists():
+        if not terminal.interactive:
+            raise ValueError("An identity already exists. Use --login.")
+        terminal.say("Your identity already exists. Enter your password to log in.")
+        args.register, args.login = False, True
     if args.login and not (folder / "identity.json").exists():
         raise ValueError("No identity on this device. Use --register or restore your encrypted backup.")
     if args.password_file:
@@ -395,23 +399,37 @@ def personal_main(args, terminal, url):
             raise ValueError("Invalid password file.")
         password = password_path.read_text(encoding="utf-8").rstrip("\r\n")
     else:
-        password = terminal.ask("Password: ", secret=True)
+        password = None
     if args.register:
-        if not args.password_file and password != terminal.ask("Confirm password: ", secret=True):
-            raise ValueError("Passwords do not match.")
+        if password is None:
+            terminal.say("Create a password of at least 12 characters. Keep it safe; it cannot be reset.")
+            while True:
+                password = terminal.ask("Password: ", secret=True)
+                if not 12 <= len(password) <= 1024:
+                    terminal.say("Use a password of 12-1024 characters.")
+                elif password != terminal.ask("Confirm password: ", secret=True):
+                    terminal.say("Passwords do not match. Try again.")
+                else:
+                    break
         name = safe_text(args.name if args.name is not None else terminal.ask("Name: ")).strip()
+        while args.name is None and not 1 <= len(name) <= 24:
+            terminal.say("Name must be 1-24 characters.")
+            name = safe_text(terminal.ask("Name: ")).strip()
         identity = create_vault(folder, name, password)
         terminal.say("Identity saved on this device. Keep your password and an encrypted backup.")
-        terminal.say(f"ID: {identity.id}")
 
         async def register():
             async with AccountConnection(url, identity, args.ca):
                 pass
 
-        asyncio.run(register())
-        terminal.say("Registered. Use --login to chat.")
-        return
-    if args.restore:
+        if not terminal.interactive:
+            terminal.say(f"ID: {identity.id}")
+            asyncio.run(register())
+            terminal.say("Registered. Run dark-chat to chat.")
+            return
+    elif args.restore:
+        if password is None:
+            password = terminal.ask("Password: ", secret=True)
         read_vault(args.restore, password)
         private_directory(folder)
         if (folder / "identity.json").exists():
@@ -419,7 +437,20 @@ def personal_main(args, terminal, url):
         private_write(folder / "identity.json", Path(args.restore).read_bytes())
         terminal.say("Identity restored. Use --login. History is not included in identity backups.")
         return
-    identity = read_vault(folder / "identity.json", password)
+    else:
+        for attempt in range(3):
+            if password is None:
+                password = terminal.ask("Password: ", secret=True)
+            try:
+                identity = read_vault(path, password)
+                break
+            except ValueError as error:
+                retryable = str(error) in {"Wrong password or damaged identity file.",
+                                           "Use a password of 12-1024 characters."}
+                if args.password_file or not terminal.interactive or not retryable or attempt == 2:
+                    raise
+                terminal.say(str(error) + " Try again.")
+                password = None
     del password
     store = LocalStore(folder, identity)
     try:
@@ -435,6 +466,10 @@ def main():
     args = parser.parse_args()
     terminal = Terminal()
     try:
+        if not any((args.new, args.chat, args.register, args.login, args.restore)) and not os.environ.get("DARK_CHAT_CODE"):
+            from .storage import default_home
+            args.login = (default_home() / "identity.json").exists()
+            args.register = not args.login
         url = server_url(args.server, args.allow_insecure)
         if args.register or args.login or args.restore:
             # Permanent identities may never authenticate over plaintext Internet/LAN links.

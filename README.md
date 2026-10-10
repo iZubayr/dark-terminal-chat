@@ -4,6 +4,7 @@ Plain English terminal chat. No banner, logo, animation, or forced color. Python
 
 ~~~sh
 pip install --upgrade dark-chat
+dark-chat
 ~~~
 
 [iPhone / iSH installation and login](docs/ish.md).
@@ -19,18 +20,18 @@ The creator gets a secret invite code. Share it privately with the other person;
 
 ## Permanent ID and offline messages
 
-Both people register once on their own devices:
+Both people start on their own devices:
 
 ~~~sh
-dark-chat --register
+dark-chat
 ~~~
 
-Choose a strong password of at least 12 characters and a display name. Registration creates private keys on this device and publishes only the public keys. Your 64-character ID is a fingerprint of those keys. Share and compare the full ID with your friend through a trusted channel. A display name alone is not proof of identity.
+On the first launch, choose a strong password of at least 12 characters and a display name; the chat opens immediately. Later launches ask only for the password. Registration creates private keys on this device and publishes only the public keys. Your 64-character ID is a fingerprint of those keys. Share and compare the full ID with your friend through a trusted channel. A display name alone is not proof of identity. If moving an existing identity to another device, restore its backup first.
 
 Open your account:
 
 ~~~sh
-dark-chat --login
+dark-chat
 ~~~
 
 Enter your password. Inside the chat, select your friend and optionally save a local name:
@@ -40,9 +41,9 @@ Enter your password. Inside the chat, select your friend and optionally save a l
 Hello.
 ~~~
 
-Next time, `/chat alice` opens that conversation. The friend must have registered, but need not be online. Incoming messages from other contacts produce a notice with their full ID; select that contact to read the conversation.
+Next time, `/chat alice` opens that conversation. `/chat` lists numbered contacts, so `/chat 1` also works. After typing `/chat `, use the arrow keys to choose a suggested contact, then Enter. Enter alone does not choose a partial contact name for you. The prompt shows the selected contact. The friend must have registered, but need not be online. Incoming messages from other contacts produce a notice with their full ID; select that contact to read the conversation. The explicit `--register` and `--login` commands remain available.
 
-Outgoing messages are saved encrypted on your device before sending. `Queued.` means the local outbox accepted the message; it is not a read receipt. The outbox retries automatically. The relay keeps encrypted messages until the recipient has saved and acknowledged them, for at most 30 days. Undelivered messages older than 30 days need to be sent again as a new message. The last 50 locally saved messages appear when opening a conversation. `/history` shows them again.
+Outgoing messages are saved encrypted on your device before sending. `Queued.` means the local outbox accepted the message; it is not a read receipt. The outbox retries automatically in order. A full mailbox pauses that contact's queue while other conversations continue. The relay keeps encrypted messages until the recipient has saved and acknowledged them, for at most 30 days. Unconfirmed outgoing messages older than 30 days stop retrying and appear as `[unconfirmed: expired]` in local history; copy and resend their text if needed. They do not block newer messages. The last 50 locally saved messages appear when opening a conversation. `/history` shows them again.
 
 The password unlocks this device's identity; it is never sent to the server. Logging in on another computer requires your encrypted identity backup as well as the password. Use one active device per identity; multi-device history synchronization is not provided.
 
@@ -59,6 +60,7 @@ Type `/` to display the command menu. Choose with the arrow keys and press Enter
 | `/who` | Show temporary-room participants |
 | `/chat ID [name]` | Open a permanent conversation; optionally name the contact locally |
 | `/chat name` | Open a saved contact |
+| `/chat` or `/chat number` | List contacts or open one by its number |
 | `/contacts` | List saved contact IDs and local names |
 | `/id` | Show your permanent ID |
 | `/history` | Show the selected conversation's recent saved messages |

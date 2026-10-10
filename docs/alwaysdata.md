@@ -59,7 +59,7 @@ Then use two computers:
 
 ~~~sh
 dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws --new --name elliot
-dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws --name whiterose
+dark-chat --server wss://ACCOUNT.alwaysdata.net/dark-chat/ws --chat --name whiterose
 ~~~
 
 The creator shares the invite code with the peer. Confirm messages arrive in both directions, a third client is refused, and MediaHub still responds normally. Local tests do not prove production behavior.
